@@ -1,0 +1,12 @@
+db:
+  host: "localhost"
+  port: "3306"
+  users: "root"
+  password: "![S2JgeauxJ6M=]"
+  database: "employee_payroll"
+  
+http:
+   path: "/api"
+   port: "8081"
+   
+

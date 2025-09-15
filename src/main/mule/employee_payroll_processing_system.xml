@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties" xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd  http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd">
+    <http:listener-config name="employee_payroll_processing_system-httpListenerConfig">
+        <http:listener-connection host="0.0.0.0" port="8081" />
+    </http:listener-config>
+    <apikit:config name="employee_payroll_processing_system-config" api="resource::5e3869d0-1bc6-4197-87ca-8ba473811381:employee_payroll_processing_system:1.0.3:raml:zip:employee_payroll_processing_system.raml" outboundHeadersMapName="outboundHeaders" httpStatusVarName="httpStatus" />
+    <db:config name="Database_Config" doc:name="Database Config" doc:id="9adc410f-6f8d-4b5f-8586-2297ead38dbb">
+        <db:my-sql-connection host="${db.host}" port="${db.port}" user="${db.users}" password="${secure::db.password}" database="${db.database}" />
+    </db:config>
+    <file:config name="File_Config" doc:name="File Config" doc:id="40799581-567e-4c7c-b0a8-f64d3cd8b2f1" />
+	<configuration-properties doc:name="Configuration properties" doc:id="78fb7ec7-86d5-42b0-9d6a-9344d2ed7688" file="dev.yaml" />
+	<secure-properties:config name="Secure_Properties_Config" doc:name="Secure Properties Config" doc:id="0cd0a861-3f29-437a-b386-58f7a090b643" file="dev.yaml" key="HelloMule" >
+		<secure-properties:encrypt algorithm="Blowfish" />
+	</secure-properties:config>
+	<flow name="employee_payroll_processing_system-main">
+        <http:listener config-ref="employee_payroll_processing_system-httpListenerConfig" path="/api/*">
+            <http:response statusCode="#[vars.httpStatus default 200]">
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:response>
+            <http:error-response statusCode="#[vars.httpStatus default 500]">
+                <http:body>#[payload]</http:body>
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:error-response>
+        </http:listener>
+        <apikit:router config-ref="employee_payroll_processing_system-config" />
+        <error-handler>
+            <on-error-propagate type="APIKIT:BAD_REQUEST">
+                <ee:transform doc:name="Transform Message">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Bad request"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">400</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:NOT_FOUND">
+                <ee:transform doc:name="Transform Message">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Resource not found"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">404</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:METHOD_NOT_ALLOWED">
+                <ee:transform doc:name="Transform Message">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Method not allowed"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">405</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:NOT_ACCEPTABLE">
+                <ee:transform doc:name="Transform Message">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Not acceptable"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">406</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:UNSUPPORTED_MEDIA_TYPE">
+                <ee:transform doc:name="Transform Message">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Unsupported media type"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">415</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:NOT_IMPLEMENTED">
+                <ee:transform doc:name="Transform Message">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Not Implemented"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">501</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+        </error-handler>
+    </flow>
+    <flow name="employee_payroll_processing_system-console">
+        <http:listener config-ref="employee_payroll_processing_system-httpListenerConfig" path="/console/*">
+            <http:response statusCode="#[vars.httpStatus default 200]">
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:response>
+            <http:error-response statusCode="#[vars.httpStatus default 500]">
+                <http:body>#[payload]</http:body>
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:error-response>
+        </http:listener>
+        <apikit:console config-ref="employee_payroll_processing_system-config" />
+        <error-handler>
+            <on-error-propagate type="APIKIT:NOT_FOUND">
+                <ee:transform doc:name="Transform Message">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Resource not found"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">404</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+        </error-handler>
+    </flow>
+    <flow name="get:\employees:employee_payroll_processing_system-config">
+        <db:select doc:name="Select_Employees_Data" doc:id="6bb9829c-14ef-4b9e-8ecf-f113c1fda110" config-ref="Database_Config">
+            <db:sql><![CDATA[select * from employees ;]]></db:sql>
+        </db:select>
+        <ee:transform doc:name="Transform Message">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+    </flow>
+    <flow name="get:\reports\(month):employee_payroll_processing_system-config">
+        <ee:transform doc:name="Transform Message">
+            <ee:variables>
+                <ee:set-variable variableName="month"><![CDATA[attributes.uriParams.'month']]></ee:set-variable>
+            </ee:variables>
+        </ee:transform>
+		<db:select doc:name="Retrive the data by month" doc:id="f04fa020-71d4-4d74-994e-680731fdaf91" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT * FROM payroll_transactions WHERE month = :m
+]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{m: vars.month}]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Transform Message">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload map (r) -> {
+  empId: r.emp_id,
+  name: r.name,
+  department: r.department,
+  grossSalary: r.gross_salary,
+  taxAmount: r.tax_amount,
+  netSalary: r.net_salary,
+  month: r.month
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+    </flow>
+    <flow name="post:\payroll:application\json:employee_payroll_processing_system-config">
+        <scheduler doc:name="Scheduler" doc:id="feb05cc5-fc00-4f41-9344-ee7e28f9dd10" >
+			<scheduling-strategy >
+				<cron expression="0 59 23 28-31 * ?" timeZone="America/New_York"/>
+			</scheduling-strategy>
+		</scheduler>
+		<set-variable value="#[payload.month]" doc:name="Set Variable" doc:id="d02a35dc-9017-42a8-b8d8-98b4a6e9fd9d" variableName="month" />
+        <db:select doc:name="Select" doc:id="ce377fed-aeb5-4d93-9225-a8f87a1a9ecc" config-ref="Database_Config" target="employees">
+            <db:sql><![CDATA[select * from employees ;]]></db:sql>
+        </db:select>
+        <set-variable value="#[payload]" doc:name="Set Variable" doc:id="e2127fe6-d7e1-4254-92ac-b7b3b06dc64c" variableName="payrollList" />
+        <foreach doc:name="For Each" doc:id="43f7cc3c-c16d-4ad0-9cef-0e7007b56bf3">
+            <db:insert doc:name="Insert" doc:id="a5e8cae8-b31f-44df-8243-7ea7002d5d2c" config-ref="Database_Config">
+                <db:sql><![CDATA[INSERT INTO payroll_transactions (emp_id, gross_salary, tax_amount, net_salary, month)
+VALUES (:empId, :grossSalary, :taxAmount, :netSalary, :month)]]></db:sql>
+                <db:input-parameters><![CDATA[#[{
+  empId: payload.empId,
+  grossSalary: payload.grossSalary,
+  taxAmount: payload.taxAmount,
+  netSalary: payload.netSalary,
+  month: payload.month
+}]]]></db:input-parameters>
+            </db:insert>
+        </foreach>
+        <ee:transform doc:name="Transform Message" doc:id="e94093a6-834a-459f-8a14-1673a5934953">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+
+var taxRules = {
+  "IT": 15,
+  "HR": 10,
+  "Finance": 12,
+  "Sales": 8
+}
+
+---
+(vars.employees default []) map (e) -> do {
+  var dept = if (e.department != null) e.department as String else ""
+  var taxRate = taxRules[dept] default 0
+  var salary = e.base_salary default 0
+  ---
+  {
+    empId: e.emp_id,
+    name: e.name,
+    department: dept,
+    grossSalary: salary,
+    taxAmount: salary * taxRate / 100,
+    netSalary: salary - (salary * taxRate / 100),
+    month: vars.month default "Unknown"
+  }
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+		<ee:transform doc:name="Transform Message" doc:id="9b7c1559-2e46-465a-af9b-9d92aec12f42" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+vars.payrollList]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ee:transform doc:name="Transform Message" doc:id="c3ad371f-ee7d-4e91-98c0-f3a92995e32e" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output text/csv header=true
+---
+vars.payrollList]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<file:write doc:name="generate the report" doc:id="40979540-07bf-4295-be24-6b4d19644b4f" config-ref="File_Config" path="C:\Mulesoft_2025\Project_Workspace\employee_payroll_processing_system.raml\Output_File\payroll_report_august.json"/>
+		<ee:transform doc:name="Transform Message">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  status: "Payroll processed successfully",
+  recordsProcessed:sizeOf(vars.payrollList)
+  
+} as Object {encoding: "UTF-8", mediaType: "application/json"}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+    </flow>
+</mule>
