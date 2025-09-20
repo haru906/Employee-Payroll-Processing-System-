@@ -36,8 +36,22 @@ Processes payroll for all employee.
 {
   "month": "August",
 }
+
 Response Example
 
+{
+    "status": "Payroll processed successfully",
+    "recordsProcessed": 5
+}
+###  GET /reports/{month}   &  GET /reports/{month}?empId
+
+Request Example:
+
+GET /reports/June   
+
+
+Response:
+The data is stored in the payroll_transactions table in the database,
 [
   {
     "empId": 101,
@@ -46,25 +60,22 @@ Response Example
     "grossSalary": 5000,
     "taxAmount": 750,
     "netSalary": 4250,
-    "month": "August"
+    "month": "June"
   }
 ]
 
-###  GET /reports/{month}
-
-Downloads the payroll report for a specific month.
-
-Request Example:
-
-GET /reports/August
-
-Response:
-The data is stored in the payroll_transactions table in the database,
  and the payroll report can also be downloaded as a CSV or JSON file
  from the /output-reports/ folder.
+ 
+ empId,name,department,grossSalary,taxAmount,netSalary,month
+101,John Doe,IT,5000,750,4250,June
+102,Jane Smith,HR,4500,450,4050,June
+103,Alan Brown,Finance,5500,660,4840,June
+104,Eva Green,Sales,4000,320,3680,June
+105,Raj Patel,IT,6000,900,5100,June
  
  #### Use Postman or curl to hit the endpoints:
 GET http://localhost:8081/api/employees
 POST http://localhost:8081/api/payroll
-GET http://localhost:8081/api/reports/August
+GET http://localhost:8081/api/reports/month
  

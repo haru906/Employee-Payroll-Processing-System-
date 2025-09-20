@@ -3,7 +3,7 @@
 http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
 http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd">
     <http:listener-config name="employee_payroll_processing_system-httpListenerConfig">
-        <http:listener-connection host="0.0.0.0" port="8081" />
+        <http:listener-connection host="0.0.0.0" port="${http.port}" />
     </http:listener-config>
     <apikit:config name="employee_payroll_processing_system-config" api="resource::5e3869d0-1bc6-4197-87ca-8ba473811381:employee_payroll_processing_system:1.0.3:raml:zip:employee_payroll_processing_system.raml" outboundHeadersMapName="outboundHeaders" httpStatusVarName="httpStatus" />
     <db:config name="Database_Config" doc:name="Database Config" doc:id="9adc410f-6f8d-4b5f-8586-2297ead38dbb">
@@ -15,13 +15,13 @@ http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/sc
 		<secure-properties:encrypt algorithm="Blowfish" />
 	</secure-properties:config>
 	<flow name="employee_payroll_processing_system-main">
-        <http:listener config-ref="employee_payroll_processing_system-httpListenerConfig" path="/api/*">
+        <http:listener config-ref="employee_payroll_processing_system-httpListenerConfig" path="${http.path}/*">
             <http:response statusCode="#[vars.httpStatus default 200]">
-                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+                <http:headers><![CDATA[#[vars.outboundHeaders default {}]]]></http:headers>
             </http:response>
             <http:error-response statusCode="#[vars.httpStatus default 500]">
-                <http:body>#[payload]</http:body>
-                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+                <http:body><![CDATA[#[payload]]]></http:body>
+                <http:headers><![CDATA[#[vars.outboundHeaders default {}]]]></http:headers>
             </http:error-response>
         </http:listener>
         <apikit:router config-ref="employee_payroll_processing_system-config" />
@@ -137,7 +137,7 @@ output application/json
         <db:select doc:name="Select_Employees_Data" doc:id="6bb9829c-14ef-4b9e-8ecf-f113c1fda110" config-ref="Database_Config">
             <db:sql><![CDATA[select * from employees ;]]></db:sql>
         </db:select>
-        <ee:transform doc:name="Transform Message">
+        <ee:transform doc:name="Employee_data">
             <ee:message>
                 <ee:set-payload><![CDATA[%dw 2.0
 output application/json
@@ -147,19 +147,65 @@ payload]]></ee:set-payload>
         </ee:transform>
     </flow>
     <flow name="get:\reports\(month):employee_payroll_processing_system-config">
-        <ee:transform doc:name="Transform Message">
-            <ee:variables>
-                <ee:set-variable variableName="month"><![CDATA[attributes.uriParams.'month']]></ee:set-variable>
-            </ee:variables>
-        </ee:transform>
-		<db:select doc:name="Retrive the data by month" doc:id="f04fa020-71d4-4d74-994e-680731fdaf91" config-ref="Database_Config">
-			<db:sql ><![CDATA[SELECT * FROM payroll_transactions WHERE month = :m
+		<ee:transform doc:name="empid&amp;month" doc:id="8cb4eff1-bfd7-4a3d-a087-b62e5cb15601" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+  month: attributes.uriParams.month,
+  empId: attributes.queryParams.empId default null
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value="#[payload.empId]" doc:name="empID" doc:id="515fbb87-1142-48a0-8624-e0bc63bb6ee1" variableName="empId" />
+		<set-variable value="#[payload.month]" doc:name="month" doc:id="b61a6cbf-6fb8-4c41-80b0-4c359c17a880" variableName="month"/>
+		<choice doc:name="Choice" doc:id="196bd48e-0a7f-4e6b-8c3d-ddd888ad89f5" >
+			<when expression="#[vars.empId != null]">
+				<db:select doc:name="reportbyID" doc:id="b6d7f442-3699-4d11-a054-a0eda46abc72" config-ref="Database_Config">
+					<db:sql ><![CDATA[SELECT * FROM payroll_transactions WHERE emp_id = :empId AND month = :month
 ]]></db:sql>
-			<db:input-parameters ><![CDATA[#[{m: vars.month}]]]></db:input-parameters>
-		</db:select>
-		<ee:transform doc:name="Transform Message">
-            <ee:message>
-                <ee:set-payload><![CDATA[%dw 2.0
+					<db:input-parameters ><![CDATA[#[{
+  empId: vars.empId as Number,
+  month: vars.month
+}]]]></db:input-parameters>
+				</db:select>
+				<ee:transform doc:name="report" doc:id="40e3a0d9-a323-4a80-a6d3-e195a11f961d" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+do {
+  var result = payload[0] default {}
+  ---
+  if (isEmpty(result)) 
+    { message: "No report found for employee" }
+  else 
+    {
+      empId: result.emp_id,
+      name: result.name,
+      department: result.department,
+      grossSalary: result.gross_salary,
+      taxAmount: result.tax_amount,
+      netSalary: result.net_salary,
+      month: result.month
+    }
+}
+]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</when>
+			<otherwise >
+				<db:select doc:name="allReports" doc:id="c436153c-8737-400a-9382-a27b8eaf2083" config-ref="Database_Config">
+					<db:sql ><![CDATA[SELECT * FROM payroll_transactions WHERE month = :month
+]]></db:sql>
+					<db:input-parameters ><![CDATA[#[{
+  month: vars.month
+}]]]></db:input-parameters>
+				</db:select>
+				<ee:transform doc:name="Repot" doc:id="c4204983-3849-4c30-b69a-ddfd1cdf09e8">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
 output application/json
 ---
 payload map (r) -> {
@@ -171,24 +217,30 @@ payload map (r) -> {
   netSalary: r.net_salary,
   month: r.month
 }]]></ee:set-payload>
-            </ee:message>
-        </ee:transform>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
     </flow>
     <flow name="post:\payroll:application\json:employee_payroll_processing_system-config">
-        <scheduler doc:name="Scheduler" doc:id="feb05cc5-fc00-4f41-9344-ee7e28f9dd10" >
+		<scheduler doc:name="Scheduler" doc:id="78199008-0c74-4651-9ddd-28c17a872bf5" >
 			<scheduling-strategy >
-				<cron expression="0 59 23 28-31 * ?" timeZone="America/New_York"/>
+				<cron expression="59 23 L * ? *" />
 			</scheduling-strategy>
 		</scheduler>
-		<set-variable value="#[payload.month]" doc:name="Set Variable" doc:id="d02a35dc-9017-42a8-b8d8-98b4a6e9fd9d" variableName="month" />
-        <db:select doc:name="Select" doc:id="ce377fed-aeb5-4d93-9225-a8f87a1a9ecc" config-ref="Database_Config" target="employees">
-            <db:sql><![CDATA[select * from employees ;]]></db:sql>
-        </db:select>
-        <set-variable value="#[payload]" doc:name="Set Variable" doc:id="e2127fe6-d7e1-4254-92ac-b7b3b06dc64c" variableName="payrollList" />
-        <foreach doc:name="For Each" doc:id="43f7cc3c-c16d-4ad0-9cef-0e7007b56bf3">
-            <db:insert doc:name="Insert" doc:id="a5e8cae8-b31f-44df-8243-7ea7002d5d2c" config-ref="Database_Config">
+		<set-variable value="#[payload.month]" doc:name="month" doc:id="d02a35dc-9017-42a8-b8d8-98b4a6e9fd9d" variableName="month" />
+		<file:read doc:name="Read Tax Rules" doc:id="ed1f4646-2dc5-4c65-85de-37ae46525554" config-ref="File_Config" path="C:\Mulesoft_2025\Project_Workspace\employee_payroll_processing_system\src\main\resources\Input\tax_rules.json"/>
+		<set-variable value="#[payload]" doc:name="taxRules" doc:id="267a0f22-33b2-4b56-adaa-95f5a323768e" variableName="taxRules"/>
+		<db:select doc:name="retriveEmployeesData" doc:id="c19499f7-8645-4d27-8843-97216b3b1dc3" config-ref="Database_Config">
+			<db:sql ><![CDATA[select * from employees;]]></db:sql>
+		</db:select>
+		<set-variable value="#[payload]" doc:name="employeesData" doc:id="d7a17e3a-16b2-4bf2-a2ba-65c329af4a02" variableName="employeesRaw"/>
+		<set-variable value='#[%dw 2.0&#10;output application/json&#10;&#10;var employees = vars.employeesRaw default []&#10;var taxMap = vars.taxRules&#10;&#10;---&#10;employees map (e) -&gt; do {&#10;  var dept = if (e.department != null) e.department as String else ""&#10;  var taxRate = taxMap[dept] default 0&#10;  var salary = e.base_salary default 0&#10;  ---&#10;  {&#10;    empId: e.emp_id,&#10;    name: e.name,&#10;    department: dept,&#10;    grossSalary: salary,&#10;    taxAmount: salary * taxRate / 100,&#10;    netSalary: salary - (salary * taxRate / 100),&#10;    month: vars.month&#10;  }&#10;}]' doc:name="taxCalculation" doc:id="d3c18e1a-688b-417a-9af9-38512e0d18b3" variableName="payrollList"/>
+		<foreach doc:name="For Each" doc:id="43f7cc3c-c16d-4ad0-9cef-0e7007b56bf3" collection="#[vars.payrollList]">
+			<db:insert doc:name="Insert into payroll" doc:id="a5e8cae8-b31f-44df-8243-7ea7002d5d2c" config-ref="Database_Config">
                 <db:sql><![CDATA[INSERT INTO payroll_transactions (emp_id, gross_salary, tax_amount, net_salary, month)
-VALUES (:empId, :grossSalary, :taxAmount, :netSalary, :month)]]></db:sql>
+ VALUES (:empId, :grossSalary, :taxAmount, :netSalary, :month)
+]]></db:sql>
                 <db:input-parameters><![CDATA[#[{
   empId: payload.empId,
   grossSalary: payload.grossSalary,
@@ -198,37 +250,7 @@ VALUES (:empId, :grossSalary, :taxAmount, :netSalary, :month)]]></db:sql>
 }]]]></db:input-parameters>
             </db:insert>
         </foreach>
-        <ee:transform doc:name="Transform Message" doc:id="e94093a6-834a-459f-8a14-1673a5934953">
-            <ee:message>
-                <ee:set-payload><![CDATA[%dw 2.0
-output application/json
-
-var taxRules = {
-  "IT": 15,
-  "HR": 10,
-  "Finance": 12,
-  "Sales": 8
-}
-
----
-(vars.employees default []) map (e) -> do {
-  var dept = if (e.department != null) e.department as String else ""
-  var taxRate = taxRules[dept] default 0
-  var salary = e.base_salary default 0
-  ---
-  {
-    empId: e.emp_id,
-    name: e.name,
-    department: dept,
-    grossSalary: salary,
-    taxAmount: salary * taxRate / 100,
-    netSalary: salary - (salary * taxRate / 100),
-    month: vars.month default "Unknown"
-  }
-}]]></ee:set-payload>
-            </ee:message>
-        </ee:transform>
-		<ee:transform doc:name="Transform Message" doc:id="9b7c1559-2e46-465a-af9b-9d92aec12f42" >
+		<ee:transform doc:name="payrolllist" doc:id="9b7c1559-2e46-465a-af9b-9d92aec12f42" >
 			<ee:message >
 				<ee:set-payload ><![CDATA[%dw 2.0
 output application/json
@@ -236,7 +258,7 @@ output application/json
 vars.payrollList]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
-		<ee:transform doc:name="Transform Message" doc:id="c3ad371f-ee7d-4e91-98c0-f3a92995e32e" >
+		<ee:transform doc:name="csvPayrolllist" doc:id="c3ad371f-ee7d-4e91-98c0-f3a92995e32e" >
 			<ee:message >
 				<ee:set-payload ><![CDATA[%dw 2.0
 output text/csv header=true
@@ -244,8 +266,8 @@ output text/csv header=true
 vars.payrollList]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
-		<file:write doc:name="generate the report" doc:id="40979540-07bf-4295-be24-6b4d19644b4f" config-ref="File_Config" path="C:\Mulesoft_2025\Project_Workspace\employee_payroll_processing_system.raml\Output_File\payroll_report_august.json"/>
-		<ee:transform doc:name="Transform Message">
+		<file:write doc:name="generate the report" doc:id="40979540-07bf-4295-be24-6b4d19644b4f" config-ref="File_Config" path="C:\Mulesoft_2025\Project_Workspace\employee_payroll_processing_system\Output_File\payroll_report.json"/>
+		<ee:transform doc:name="successfully complited">
             <ee:message>
                 <ee:set-payload><![CDATA[%dw 2.0
 output application/json
